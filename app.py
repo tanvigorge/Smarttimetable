@@ -4,7 +4,14 @@ from datetime import datetime
 
 import streamlit as st
 
-from calendar_api import create_calendar_event, fetch_upcoming_events, get_calendar_service
+from calendar_api import (
+    create_calendar_event,
+    fetch_upcoming_events,
+    find_conflicts,
+    get_calendar_service,
+    parse_natural_language_request,
+    suggest_next_free_slot,
+)
 
 SCHEDULE_FILE = "schedule.json"
 
@@ -112,6 +119,66 @@ if st.session_state.schedule:
 else:
     st.info("Add a class schedule item to save it here.")
 
+st.header("Natural Language Scheduling")
+request_text = st.text_area(
+    "Describe the event you want to schedule",
+    value="Schedule a team sync tomorrow at 2pm for 1 hour",
+)
+if st.button("Process Scheduling Request"):
+    if not request_text.strip():
+        st.warning("Please enter a scheduling request.")
+    elif st.session_state.service is None:
+        st.warning("Please connect to Google Calendar first.")
+    else:
+        try:
+            parsed_request = parse_natural_language_request(request_text, reference_date=datetime.now())
+            st.info(
+                f"Parsed request: {parsed_request['title']} from {parsed_request['start_dt'].strftime('%Y-%m-%d %H:%M')} to {parsed_request['end_dt'].strftime('%Y-%m-%d %H:%M')}"
+            )
+            existing_events = fetch_upcoming_events(st.session_state.service, max_results=20)
+            conflicts = find_conflicts(parsed_request["start_dt"], parsed_request["end_dt"], existing_events)
+            if conflicts:
+                st.warning("This request overlaps with the following existing events:")
+                for conflict in conflicts:
+                    st.write(
+                        f"- {conflict['summary']} ({conflict['start_dt'].strftime('%Y-%m-%d %H:%M')} to {conflict['end_dt'].strftime('%Y-%m-%d %H:%M')})"
+                    )
+            else:
+                create_calendar_event(
+                    st.session_state.service,
+                    parsed_request["title"],
+                    parsed_request["start_dt"],
+                    parsed_request["end_dt"],
+                    parsed_request["description"],
+                )
+                st.success("Event created successfully from your natural-language request!")
+        except ValueError as e:
+            st.error(str(e))
+        except Exception as e:
+            st.error(f"Could not process request: {e}")
+
+st.header("Suggest a Free Slot")
+with st.form("free_slot_form"):
+    slot_start = st.text_input("Suggested start time (YYYY-MM-DD HH:MM)", value="2026-07-10 08:00")
+    slot_duration = st.number_input("Duration in minutes", min_value=15, max_value=480, value=60, step=15)
+    slot_submitted = st.form_submit_button("Suggest Next Free Slot")
+
+if slot_submitted:
+    if st.session_state.service is None:
+        st.warning("Please connect to Google Calendar first.")
+    else:
+        try:
+            start_dt = datetime.strptime(slot_start, "%Y-%m-%d %H:%M")
+            existing_events = fetch_upcoming_events(st.session_state.service, max_results=20)
+            slot = suggest_next_free_slot(start_dt, int(slot_duration), existing_events)
+            st.success(
+                f"Suggested slot: {slot['start_dt'].strftime('%Y-%m-%d %H:%M')} to {slot['end_dt'].strftime('%Y-%m-%d %H:%M')}"
+            )
+        except ValueError:
+            st.error("Please use the format YYYY-MM-DD HH:MM")
+        except Exception as e:
+            st.error(f"Could not suggest a free slot: {e}")
+
 st.header("Create a New Event")
 with st.form("event_form"):
     title = st.text_input("Event title")
@@ -132,8 +199,17 @@ if submitted:
             if end_dt <= start_dt:
                 st.error("End time must be after start time.")
             else:
-                create_calendar_event(st.session_state.service, title, start_dt, end_dt, description)
-                st.success("Event created successfully!")
+                existing_events = fetch_upcoming_events(st.session_state.service, max_results=20)
+                conflicts = find_conflicts(start_dt, end_dt, existing_events)
+                if conflicts:
+                    st.warning("This time overlaps with an existing event:")
+                    for conflict in conflicts:
+                        st.write(
+                            f"- {conflict['summary']} ({conflict['start_dt'].strftime('%Y-%m-%d %H:%M')} to {conflict['end_dt'].strftime('%Y-%m-%d %H:%M')})"
+                        )
+                else:
+                    create_calendar_event(st.session_state.service, title, start_dt, end_dt, description)
+                    st.success("Event created successfully!")
         except ValueError:
             st.error("Please use the format YYYY-MM-DD HH:MM")
         except Exception as e:
