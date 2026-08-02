@@ -12,8 +12,30 @@ from calendar_api import (
     parse_natural_language_request,
     suggest_next_free_slot,
 )
+from knowledge_system import TopicKnowledgeSystem
 
 SCHEDULE_FILE = "schedule.json"
+TOPIC_DOCUMENTS = [
+    {
+        "subject": "Biology",
+        "chapter": "Cell Structure",
+        "title": "Cells and Organelles",
+        "content": "Cells contain organelles like mitochondria and ribosomes that help the cell function.",
+    },
+    {
+        "subject": "Biology",
+        "chapter": "Cell Structure",
+        "title": "Mitochondria Basics",
+        "content": "Mitochondria produce energy for the cell through respiration.",
+    },
+    {
+        "subject": "Chemistry",
+        "chapter": "Atoms",
+        "title": "Atomic Structure",
+        "content": "Atoms are made of protons, neutrons, and electrons.",
+    },
+]
+TOPIC_KNOWLEDGE_SYSTEM = TopicKnowledgeSystem(TOPIC_DOCUMENTS)
 
 
 def load_schedule(file_path=SCHEDULE_FILE):
@@ -118,6 +140,46 @@ if st.session_state.schedule:
                 st.write("No classes")
 else:
     st.info("Add a class schedule item to save it here.")
+
+st.header("Topic Knowledge Explorer")
+knowledge_question = st.text_area(
+    "Ask about a topic",
+    value="How do cells produce energy?",
+)
+if st.button("Get Topic Insights"):
+    if not knowledge_question.strip():
+        st.warning("Please enter a topic question.")
+    else:
+        topic_result = TOPIC_KNOWLEDGE_SYSTEM.answer_question(knowledge_question)
+
+        st.subheader("Study Mode")
+        tab_explanation, tab_practice, tab_progression = st.tabs(["Explanation", "Practice", "Progression"])
+
+        with tab_explanation:
+            st.write(topic_result["explanation"])
+            st.write(topic_result["answer"])
+            if topic_result["references"]:
+                st.write("**References**")
+                for reference in topic_result["references"]:
+                    st.write(f"- {reference['title']} ({reference['subject']} / {reference['chapter']})")
+
+        with tab_practice:
+            if topic_result["question_bank"]:
+                for question in topic_result["question_bank"]:
+                    st.write(f"- {question}")
+            if topic_result["related_questions"]:
+                st.write("**Related Questions**")
+                for question in topic_result["related_questions"]:
+                    st.write(f"- {question}")
+
+        with tab_progression:
+            for step in topic_result["learning_progression"]:
+                st.write(f"- {step['stage'].title()}: {step['title']} — {step['description']}")
+
+        st.subheader("Coverage")
+        for subject, chapters in topic_result["coverage"].items():
+            for chapter, count in chapters.items():
+                st.write(f"- {subject} / {chapter}: {count} document(s)")
 
 st.header("Natural Language Scheduling")
 request_text = st.text_area(
