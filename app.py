@@ -4,6 +4,17 @@ from datetime import datetime
 
 import streamlit as st
 
+from academic_scheduler import (
+    allocate_study_time,
+    build_assignment_deadline,
+    build_course_session,
+    build_exam_schedule,
+    build_reminder,
+    generate_semester_template,
+    generate_study_session_plan,
+    get_indian_academic_calendar,
+    parse_free_time_query,
+)
 from calendar_api import (
     create_calendar_event,
     fetch_upcoming_events,
@@ -75,6 +86,18 @@ if "service" not in st.session_state:
 if "schedule" not in st.session_state:
     st.session_state.schedule = load_schedule()
 
+if "academic_schedule" not in st.session_state:
+    st.session_state.academic_schedule = []
+
+if "exam_schedule" not in st.session_state:
+    st.session_state.exam_schedule = []
+
+if "assignment_deadlines" not in st.session_state:
+    st.session_state.assignment_deadlines = []
+
+if "study_reminders" not in st.session_state:
+    st.session_state.study_reminders = []
+
 if st.button("Connect to Google Calendar"):
     try:
         service = get_calendar_service()
@@ -140,6 +163,166 @@ if st.session_state.schedule:
                 st.write("No classes")
 else:
     st.info("Add a class schedule item to save it here.")
+
+st.header("Academic Planner")
+current_year = datetime.now().year
+semester_template = generate_semester_template("Semester 1", current_year)
+calendar_overview = get_indian_academic_calendar(current_year, "Semester 1")
+
+st.subheader("Semester / Term Templates")
+st.write(f"Template for {semester_template['term_name']} ({semester_template['year']}): {semester_template['week_count']} teaching weeks")
+for break_entry in semester_template["breaks"]:
+    st.write(f"- {break_entry['name']}: {break_entry['start_date']} to {break_entry['end_date']}")
+for festival in semester_template["festival_holidays"][:5]:
+    st.write(f"- {festival['name']} ({festival['month']})")
+
+with st.form("academic_session_form"):
+    academic_course = st.text_input("Course name")
+    session_type = st.selectbox("Session type", ["Lecture", "Lab", "Tutorial", "Seminar"])
+    session_day = st.selectbox("Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
+    session_start = st.text_input("Start time (HH:MM)", value="09:00")
+    session_end = st.text_input("End time (HH:MM)", value="10:00")
+    academic_semester = st.selectbox("Semester", ["Semester 1", "Semester 2", "Summer Term"])
+    academic_location = st.text_input("Location")
+    academic_notes = st.text_area("Notes")
+    add_academic_session = st.form_submit_button("Save Course Session")
+
+if add_academic_session:
+    if not academic_course:
+        st.warning("Please enter a course name.")
+    else:
+        try:
+            session = build_course_session(
+                course_name=academic_course,
+                session_type=session_type,
+                day=session_day,
+                start_time=session_start,
+                end_time=session_end,
+                semester=academic_semester,
+                location=academic_location,
+                notes=academic_notes,
+            )
+            st.session_state.academic_schedule.append(session)
+            st.success("Course-specific session saved successfully.")
+        except ValueError as exc:
+            st.error(str(exc))
+
+if st.session_state.academic_schedule:
+    st.subheader("Course-Specific Schedule")
+    st.table(st.session_state.academic_schedule)
+else:
+    st.info("Add lecture, lab, or tutorial sessions for your semester.")
+
+with st.form("exam_form"):
+    exam_course = st.text_input("Exam course")
+    exam_title = st.text_input("Exam title")
+    exam_date = st.text_input("Exam date (YYYY-MM-DD)", value="2026-10-15")
+    exam_start = st.text_input("Exam start (HH:MM)", value="09:00")
+    exam_end = st.text_input("Exam end (HH:MM)", value="10:30")
+    exam_hours = st.number_input("Study hours", min_value=1, max_value=20, value=6)
+    exam_priority = st.selectbox("Priority", ["low", "medium", "high"])
+    exam_semester = st.selectbox("Semester", ["Semester 1", "Semester 2", "Summer Term"])
+    add_exam = st.form_submit_button("Save Exam")
+
+if add_exam:
+    if not exam_course:
+        st.warning("Please enter an exam course.")
+    else:
+        try:
+            exam = build_exam_schedule(
+                course_name=exam_course,
+                exam_title=exam_title,
+                exam_date=exam_date,
+                start_time=exam_start,
+                end_time=exam_end,
+                study_hours=int(exam_hours),
+                priority=exam_priority,
+                semester=exam_semester,
+            )
+            st.session_state.exam_schedule.append(exam)
+            st.success("Exam schedule saved successfully.")
+        except ValueError as exc:
+            st.error(str(exc))
+
+if st.session_state.exam_schedule:
+    st.subheader("Exam Schedule and Study Allocation")
+    exam_table = st.session_state.exam_schedule
+    st.table(exam_table)
+    study_plan = allocate_study_time(exam_table, weekly_study_hours=12)
+    st.write("Study time allocation:")
+    st.table(study_plan)
+else:
+    st.info("Add exam dates to manage study time allocation.")
+
+with st.form("assignment_form"):
+    assignment_title = st.text_input("Assignment title")
+    assignment_course = st.text_input("Course")
+    assignment_due_date = st.text_input("Due date (YYYY-MM-DD)", value="2026-09-03")
+    assignment_priority = st.selectbox("Priority", ["low", "medium", "high"])
+    assignment_hours = st.number_input("Estimated hours", min_value=1, max_value=20, value=3)
+    add_assignment = st.form_submit_button("Save Assignment")
+
+if add_assignment:
+    if not assignment_title or not assignment_course:
+        st.warning("Please enter both assignment title and course.")
+    else:
+        try:
+            assignment = build_assignment_deadline(
+                assignment_title=assignment_title,
+                course_name=assignment_course,
+                due_date=assignment_due_date,
+                priority=assignment_priority,
+                estimated_hours=int(assignment_hours),
+            )
+            st.session_state.assignment_deadlines.append(assignment)
+            st.success("Assignment deadline tracked successfully.")
+        except ValueError as exc:
+            st.error(str(exc))
+
+if st.session_state.assignment_deadlines:
+    st.subheader("Assignment Deadline Tracker")
+    st.table(st.session_state.assignment_deadlines)
+else:
+    st.info("Add assignment deadlines with priority levels to track work.")
+
+study_plan = generate_study_session_plan(st.session_state.assignment_deadlines, st.session_state.exam_schedule, daily_minutes=90)
+if study_plan:
+    st.subheader("Intelligent Study Session Scheduling")
+    st.table(study_plan)
+else:
+    st.info("Add assignments or exams to generate an intelligent study session plan.")
+
+with st.form("reminder_form"):
+    reminder_title = st.text_input("Reminder title")
+    reminder_time = st.text_input("Reminder time (YYYY-MM-DD HH:MM)", value="2026-09-02 18:00")
+    reminder_channel = st.selectbox("Channel", ["email", "sms"])
+    add_reminder = st.form_submit_button("Save Reminder")
+
+if add_reminder:
+    if not reminder_title:
+        st.warning("Please enter a reminder title.")
+    else:
+        try:
+            reminder = build_reminder(reminder_title, reminder_time, reminder_channel)
+            st.session_state.study_reminders.append(reminder)
+            st.success("Reminder created successfully.")
+        except ValueError as exc:
+            st.error(str(exc))
+
+if st.session_state.study_reminders:
+    st.subheader("Reminder System")
+    st.table(st.session_state.study_reminders)
+else:
+    st.info("Create a reminder for email or SMS notifications.")
+
+st.header("Free Time Query")
+free_time_query = st.text_input("Ask for free time", value="find free time tomorrow for 90 minutes")
+if st.button("Check free slot"):
+    if not free_time_query.strip():
+        st.warning("Please enter a free-time query.")
+    else:
+        parsed_query = parse_free_time_query(free_time_query, reference_date=datetime.now())
+        st.info(f"Query parsed for {parsed_query['date']} with {parsed_query['duration_minutes']} minutes requested.")
 
 st.header("Topic Knowledge Explorer")
 knowledge_question = st.text_area(
