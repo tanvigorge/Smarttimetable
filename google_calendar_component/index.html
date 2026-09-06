@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    const parentOrigin = window.parent;
+    let currentRequestId = null;
+    let tokenClient = null;
+    let readySent = false;
+
+    function sendMessage(type, value) {
+      parentOrigin.postMessage({isStreamlitMessage: true, type, value}, "*");
+    }
+
+    function setFrameHeight(height) {
+      sendMessage("streamlit:setFrameHeight", height);
+    }
+
+    function sendValue(value) {
+      sendMessage("streamlit:setComponentValue", value);
+    }
+
+    function setReady() {
+      if (!readySent) {
+        sendMessage("streamlit:componentReady", {apiVersion: 1});
+        readySent = true;
+      }
+      setFrameHeight(0);
+    }
+
+    function initialize(clientId) {
+      if (!window.google || !google.accounts || !google.accounts.oauth2) {
+        window.setTimeout(() => initialize(clientId), 100);
+        return;
+      }
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: "https://www.googleapis.com/auth/calendar.events",
+        callback: (response) => {
+          if (response.error) {
+            sendValue({status: "error", message: "Calendar permission was denied."});
+            return;
+          }
+          sendValue({status: "connected", access_token: response.access_token});
+        },
+        error_callback: (error) => {
+          const message = error && error.type === "popup_closed"
+            ? "Google authorization was cancelled."
+            : "Unable to connect to Google Calendar.";
+          sendValue({status: "error", message});
+        }
+      });
+      if (currentRequestId) {
+        tokenClient.requestAccessToken({prompt: "consent"});
+      }
+    }
+
+    window.addEventListener("message", (event) => {
+      if (!event.data || !event.data.type) return;
+      if (event.data.type === "streamlit:render") {
+        currentRequestId = event.data.args.request_id;
+        setReady();
+        initialize(event.data.args.client_id);
+      }
+    });
+  </script>
+</head>
+<body></body>
+</html>

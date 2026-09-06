@@ -8,14 +8,10 @@ except ImportError:  # pragma: no cover - dependency is installed in normal envi
     load_dotenv = None
 
 try:
-    from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
 except ImportError:  # pragma: no cover - exercised in lightweight test environments
-    Request = None
     Credentials = None
-    InstalledAppFlow = None
     build = None
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
@@ -162,50 +158,14 @@ def suggest_next_free_slot(start_dt, duration_minutes, existing_events=None):
         candidate_end = candidate_start + timedelta(minutes=duration_minutes)
 
 
-def get_calendar_service(credentials_file="credentials.json", token_file="token.json"):
-    """Authenticate and return a Google Calendar service object."""
-    if build is None or Credentials is None or InstalledAppFlow is None or Request is None:
+def get_calendar_service(access_token=None):
+    """Build a Calendar service from a browser-issued OAuth access token."""
+    if build is None or Credentials is None:
         raise RuntimeError("Google Calendar dependencies are not installed. Install the packages from requirements.txt first.")
-
-    client_id = os.environ.get("GOOGLE_CLIENT_ID")
-    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
-    client_config = None
-    if client_id and client_secret:
-        client_config = {
-            "installed": {
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "auth_uri": os.environ.get("GOOGLE_AUTH_URI", "https://accounts.google.com/o/oauth2/auth"),
-                "token_uri": os.environ.get("GOOGLE_TOKEN_URI", "https://oauth2.googleapis.com/token"),
-                "redirect_uris": [os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost")],
-            }
-        }
-    elif not os.path.exists(credentials_file):
-        raise FileNotFoundError(
-            "Google OAuth settings are missing. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env."
-        )
-
-    creds = None
-    if os.path.exists(token_file):
-        try:
-            creds = Credentials.from_authorized_user_file(token_file, SCOPES)
-        except Exception:
-            creds = None
-
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            if client_config:
-                flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(credentials_file, SCOPES)
-            creds = flow.run_local_server(port=0)
-
-        with open(token_file, "w", encoding="utf-8") as token:
-            token.write(creds.to_json())
-
-    return build("calendar", "v3", credentials=creds)
+    if not access_token:
+        raise ValueError("Google Calendar authorization is required.")
+    credentials = Credentials(token=access_token, scopes=SCOPES)
+    return build("calendar", "v3", credentials=credentials)
 
 
 def create_calendar_event(service, title, start_dt, end_dt, description=""):

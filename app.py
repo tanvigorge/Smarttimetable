@@ -5,6 +5,7 @@ from datetime import date, datetime
 import streamlit as st
 
 from calendar_api import create_calendar_event, fetch_upcoming_events, get_calendar_service
+from google_calendar_component import request_google_access_token
 from scheduling import (
     CLASS_TYPES,
     DAYS,
@@ -78,6 +79,12 @@ st.write("A simple assistant to manage your classes, assignments, and events.")
 if "service" not in st.session_state:
     st.session_state.service = None
 
+if "calendar_access_token" not in st.session_state:
+    st.session_state.calendar_access_token = None
+
+if "calendar_auth_request" not in st.session_state:
+    st.session_state.calendar_auth_request = None
+
 if "schedule" not in st.session_state:
     st.session_state.schedule = load_schedule()
 
@@ -87,15 +94,31 @@ if "workflows" not in st.session_state:
 if "academic_data" not in st.session_state:
     st.session_state.academic_data = load_academic_data()
 
-if st.button("Connect to Google Calendar"):
-    try:
-        service = get_calendar_service()
-        st.session_state.service = service
-        st.success("Connected to Google Calendar successfully!")
-    except FileNotFoundError as e:
-        st.error(str(e))
-    except Exception as e:
-        st.error(f"Authentication failed: {e}")
+if st.session_state.service is not None:
+    st.success("✓ Google Calendar Connected")
+elif st.button("Connect to Google Calendar"):
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    if not client_id:
+        st.error("Google Calendar is not configured. Add GOOGLE_CLIENT_ID to .env and restart the app.")
+    else:
+        st.session_state.calendar_auth_request = datetime.now().isoformat()
+        st.rerun()
+
+if st.session_state.calendar_auth_request and st.session_state.service is None:
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    auth_result = request_google_access_token(client_id, st.session_state.calendar_auth_request)
+    if auth_result:
+        st.session_state.calendar_auth_request = None
+        if auth_result.get("status") == "connected":
+            try:
+                st.session_state.calendar_access_token = auth_result["access_token"]
+                st.session_state.service = get_calendar_service(st.session_state.calendar_access_token)
+                st.rerun()
+            except Exception:
+                st.session_state.calendar_access_token = None
+                st.error("Unable to connect to Google Calendar.")
+        else:
+            st.error(auth_result.get("message", "Unable to connect to Google Calendar."))
 
 st.header("Class Schedule")
 with st.form("schedule_form"):

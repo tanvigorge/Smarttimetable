@@ -10,7 +10,6 @@ venv/
 
 # Streamlit and local files
 token.json
-credentials.json
 .env
 schedule.json
 academic_data.json
