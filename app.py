@@ -3,6 +3,7 @@ import os
 from datetime import date, datetime
 
 import streamlit as st
+from dotenv import load_dotenv
 
 from calendar_api import create_calendar_event, fetch_upcoming_events, get_calendar_service
 from google_calendar_component import request_google_access_token
@@ -20,6 +21,8 @@ from scheduling import (
 )
 from reminder_api import build_reminders, send_email_reminder, smtp_defaults
 from workflow_api import load_workflows, now_iso, save_workflows
+
+load_dotenv()
 
 SCHEDULE_FILE = "schedule.json"
 WORKFLOW_FILE = "workflows.json"
@@ -94,10 +97,20 @@ if "workflows" not in st.session_state:
 if "academic_data" not in st.session_state:
     st.session_state.academic_data = load_academic_data()
 
+def get_google_client_id():
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+    if client_id:
+        return client_id
+    try:
+        return str(st.secrets.get("GOOGLE_CLIENT_ID", "")).strip()
+    except (FileNotFoundError, KeyError):
+        return ""
+
+
 if st.session_state.service is not None:
     st.success("✓ Google Calendar Connected")
 elif st.button("Connect to Google Calendar"):
-    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    client_id = get_google_client_id()
     if not client_id:
         st.error("Google Calendar is not configured. Add GOOGLE_CLIENT_ID to .env and restart the app.")
     else:
@@ -105,7 +118,7 @@ elif st.button("Connect to Google Calendar"):
         st.rerun()
 
 if st.session_state.calendar_auth_request and st.session_state.service is None:
-    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    client_id = get_google_client_id()
     auth_result = request_google_access_token(client_id, st.session_state.calendar_auth_request)
     if auth_result:
         st.session_state.calendar_auth_request = None
