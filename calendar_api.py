@@ -3,6 +3,11 @@ import re
 from datetime import datetime, timedelta, timezone
 
 try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - dependency is installed in normal environments
+    load_dotenv = None
+
+try:
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
@@ -14,6 +19,9 @@ except ImportError:  # pragma: no cover - exercised in lightweight test environm
     build = None
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
+
+if load_dotenv is not None:
+    load_dotenv()
 
 
 def _coerce_datetime(value):
@@ -159,9 +167,22 @@ def get_calendar_service(credentials_file="credentials.json", token_file="token.
     if build is None or Credentials is None or InstalledAppFlow is None or Request is None:
         raise RuntimeError("Google Calendar dependencies are not installed. Install the packages from requirements.txt first.")
 
-    if not os.path.exists(credentials_file):
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    client_config = None
+    if client_id and client_secret:
+        client_config = {
+            "installed": {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "auth_uri": os.environ.get("GOOGLE_AUTH_URI", "https://accounts.google.com/o/oauth2/auth"),
+                "token_uri": os.environ.get("GOOGLE_TOKEN_URI", "https://oauth2.googleapis.com/token"),
+                "redirect_uris": [os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost")],
+            }
+        }
+    elif not os.path.exists(credentials_file):
         raise FileNotFoundError(
-            "credentials.json was not found. Create it from Google Cloud Console and place it in the project folder."
+            "Google OAuth settings are missing. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env."
         )
 
     creds = None
@@ -175,7 +196,10 @@ def get_calendar_service(credentials_file="credentials.json", token_file="token.
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(credentials_file, SCOPES)
+            if client_config:
+                flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file(credentials_file, SCOPES)
             creds = flow.run_local_server(port=0)
 
         with open(token_file, "w", encoding="utf-8") as token:

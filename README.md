@@ -19,9 +19,10 @@ Google Calendar is optional. The class planner, academic planner, study queue, a
 ## Google Calendar setup
 
 1. In Google Cloud Console, create a project and enable the Google Calendar API.
-2. Create an OAuth client for a desktop application and download it as `credentials.json` in the project directory.
-3. Click **Connect to Google Calendar** in the app and complete the browser authorization flow.
-4. The generated `token.json` is local and must not be committed.
+2. Create an OAuth client for a desktop application.
+3. Copy `.env.example` to `.env` and set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` from Google Cloud Console.
+4. Click **Connect to Google Calendar** in the app and complete the browser authorization flow.
+5. The generated `token.json` is local and must not be committed.
 
 Calendar API failures are shown in the UI and do not prevent local academic planning.
 
@@ -40,7 +41,7 @@ Calendar API failures are shown in the UI and do not prevent local academic plan
 
 ## Local data and privacy
 
-The app stores local planner data in `schedule.json`, `academic_data.json`, and `workflows.json`. OAuth files are `credentials.json` and `token.json`. These files are ignored by Git. Do not place real student data in a public repository or commit OAuth secrets.
+The app stores local planner data in `schedule.json`, `academic_data.json`, and `workflows.json`. OAuth secrets are loaded from the ignored `.env` file, and the generated `token.json` is also ignored by Git. Do not place real student data in a public repository or commit OAuth secrets.
 
 ## Deployment
 
