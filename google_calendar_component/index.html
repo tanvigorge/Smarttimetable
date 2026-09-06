@@ -9,16 +9,16 @@
     let tokenClient = null;
     let readySent = false;
 
-    function sendMessage(type, value) {
-      parentOrigin.postMessage({isStreamlitMessage: true, type, value}, "*");
+    function sendMessage(type, data) {
+      parentOrigin.postMessage(Object.assign({isStreamlitMessage: true, type}, data || {}), "*");
     }
 
     function setFrameHeight(height) {
-      sendMessage("streamlit:setFrameHeight", height);
+      sendMessage("streamlit:setFrameHeight", {height});
     }
 
     function sendValue(value) {
-      sendMessage("streamlit:setComponentValue", value);
+      sendMessage("streamlit:setComponentValue", {value});
     }
 
     function setReady() {
