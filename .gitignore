@@ -12,6 +12,8 @@ venv/
 token.json
 credentials.json
 schedule.json
+academic_data.json
+workflows.json
 
 # IDE files
 .vscode/
