@@ -112,7 +112,10 @@ if st.session_state.service is not None:
 elif st.button("Connect to Google Calendar"):
     client_id = get_google_client_id()
     if not client_id:
-        st.error("Google Calendar is not configured. Add GOOGLE_CLIENT_ID to .env and restart the app.")
+        st.error(
+            "Google Calendar is not configured. For local use, add GOOGLE_CLIENT_ID to .env; "
+            "for Streamlit Cloud, add GOOGLE_CLIENT_ID under App Settings > Secrets, then reboot the app."
+        )
     else:
         st.session_state.calendar_auth_request = datetime.now().isoformat()
         st.rerun()
